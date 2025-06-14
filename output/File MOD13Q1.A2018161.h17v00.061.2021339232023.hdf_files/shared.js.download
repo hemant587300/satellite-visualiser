@@ -1,0 +1,29 @@
+// NOTE: THIS MODULE HAS A DEPENDENCY ON THE "AUTHORITY_URS" CONSTANT
+//       DEFINED IN mojo-common/lib/perl5/MODAPS/Mojo/Constants.pm
+//       IF THAT VALUE CHANGES, THIS VALUE MUST ALSO CHANGE TO MATCH IT!
+const AUTHORITY_URS = "URS";
+
+window.isUserLoggedIn = async () => {
+    const response = await fetch("/api/v2/profiles/users/self", {
+        headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            "X-Requested-With": "XMLHttpRequest",
+        },
+        credentials: "same-origin",
+    });
+    if (! response.ok) { return false; }    // THIS IS WRAPPED IN A PROMISE!
+
+    const data = await response.json();
+    if (data.credentials)
+    {
+      for (let ii = 0; ii < data.credentials.length; ii++)
+      {
+        if (data.credentials[ii].authority === AUTHORITY_URS)
+          return data.credentials[ii];  // THIS IS WRAPPED IN A PROMISE!
+      }
+    }
+    return false;  // THIS IS WRAPPED IN A PROMISE!
+};
+
+

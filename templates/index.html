@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Satellite NDVI Viewer</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #eef5f9;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 700px;
+      margin: 30px auto;
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    }
+    h2 {
+      color: #2c3e50;
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    label {
+      font-weight: bold;
+      display: block;
+      margin: 15px 0 5px;
+    }
+    input[type="text"],
+    input[type="number"],
+    input[type="file"],
+    select {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 15px;
+    }
+    button, .demo-button {
+      margin-top: 20px;
+      background-color: #2e86de;
+      color: white;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+      width: 100%;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+    }
+    button:hover, .demo-button:hover {
+      background-color: #1b4f72;
+    }
+    #map {
+      height: 300px;
+      margin-top: 15px;
+      border-radius: 6px;
+      border: 2px solid #ccc;
+    }
+  </style>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+</head>
+
+<body>
+  <div class="container">
+    <h2>🌿 Satellite NDVI Viewer</h2>
+
+    <form action="/upload" method="POST" enctype="multipart/form-data">
+      <label for="city">Select a City:</label>
+      <select id="city" onchange="selectCity()">
+        <option value="">-- Choose a City --</option>
+        <option value="Mumbai,19.076,72.8777">Mumbai</option>
+        <option value="Delhi,28.6139,77.209">Delhi</option>
+        <option value="Nagpur,21.1458,79.0882">Nagpur</option>
+        <option value="Ahmedabad,23.0225,72.5714">Ahmedabad</option>
+        <option value="Hyderabad,17.385,78.4867">Hyderabad</option>
+        <option value="Boulder,40.015,-105.2705">Boulder (USA)</option>
+        <option value="Phoenix,33.4484,-112.074">Phoenix (USA)</option>
+        <option value="Nairobi,-1.2921,36.8219">Nairobi (Kenya)</option>
+        <option value="Beijing,39.9042,116.4074">Beijing (China)</option>
+        <option value="Jakarta,-6.2088,106.8456">Jakarta (Indonesia)</option>
+      </select>
+
+      <label for="location">Search a Place:</label>
+      <input type="text" id="location" placeholder="e.g., custom location..." />
+
+      <button type="button" onclick="searchLocation()">🔍 Search Location</button>
+
+      <label for="latitude">Latitude:</label>
+      <input type="number" id="latitude" name="latitude" step="any" required>
+
+      <label for="longitude">Longitude:</label>
+      <input type="number" id="longitude" name="longitude" step="any" required>
+
+      <div id="map"></div>
+
+      <label for="files">Upload NDVI GeoTIFF files:</label>
+      <input type="file" name="files" accept=".tif" multiple required />
+
+      <button type="submit">🚀 Fetch & View NDVI Map</button>
+    </form>
+
+    <a class="demo-button" href="/output/ndvi_map_with_overlay.html" target="_blank">🧪 Try Sample NDVI Map</a>
+  </div>
+
+  <script>
+    const map = L.map('map').setView([20, 78], 4); // Center on India
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18
+    }).addTo(map);
+
+    let marker = L.marker([20, 78]).addTo(map);
+
+    function updateInputs(lat, lon) {
+      document.getElementById('latitude').value = lat.toFixed(6);
+      document.getElementById('longitude').value = lon.toFixed(6);
+      marker.setLatLng([lat, lon]);
+      map.setView([lat, lon], 10);
+    }
+
+    function selectCity() {
+      const cityData = document.getElementById("city").value;
+      if (!cityData) return;
+      const [name, lat, lon] = cityData.split(",");
+      updateInputs(parseFloat(lat), parseFloat(lon));
+    }
+
+    async function searchLocation() {
+      const place = document.getElementById('location').value;
+      if (!place) return;
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(place)}`;
+      const response = await fetch(url);
+      const results = await response.json();
+
+      if (results.length > 0) {
+        const lat = parseFloat(results[0].lat);
+        const lon = parseFloat(results[0].lon);
+        updateInputs(lat, lon);
+      } else {
+        alert("Location not found. Try a different name.");
+      }
+    }
+
+    map.on('click', function (e) {
+      const { lat, lng } = e.latlng;
+      updateInputs(lat, lng);
+    });
+  </script>
+</body>
+</html>

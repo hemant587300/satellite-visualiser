@@ -1,0 +1,58 @@
+(function($){
+    $(document)
+        .on("click", ".web-services a[href='#']", function (event) {
+            event.preventDefault();
+            // $(this).next().slideToggle();
+        })
+        .on("click", "body", function (event) {
+            var $target = $(event.target);
+            if ($target.is("body, #background-layer")) {
+                $("body")
+                    .toggleClass("green")
+                    .toggleClass("blue");
+            }
+        })
+        .on("click", ".nav-tabs a", function (event) {
+            // Add hash to URL each time a Missions & Measurements tab is selected
+            window.location.hash = event.currentTarget.hash;
+        })
+        .on("click", "#search-nav > a", function (event) {
+            event.preventDefault();
+            $(this)
+                .closest("li")
+                .siblings("li")
+                .toggleClass("hide-visibly")
+                .end() // re-select the clicked top nav list item
+                .children("a")
+                .toggleClass("hide");
+
+            $("#search-box").toggleClass("hide");
+
+            setTimeout(function () {
+                $("#search-box input").toggleClass("on");
+            }, 100);
+        });
+        
+    // Automatically show the Missions & Measurements tab based on the hash
+    let tabSelectors = [];
+
+    $(".nav-tabs a").each(function () {
+        tabSelectors.push(this.hash);
+    });
+
+    if (tabSelectors.indexOf(window.location.hash) !== -1) {
+        $(".nav-tabs a[href=\"" + window.location.hash + "\"]").tab("show");
+    }
+
+    (function () {
+        // Open all external links in a new window
+        var externalLinkSelector = "a[href^=http]:not([data-new-window-icon='false'])";
+
+        $(externalLinkSelector)
+            .attr("target", "_blank")
+            .attr("rel", "noopener noreferrer")
+            .append(" <i class='fas fa-external-link-alt laads-external-link'></i>");
+    })();
+
+    window.feedback.init({showIcon: false,});
+})(jQuery);

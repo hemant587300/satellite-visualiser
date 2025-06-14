@@ -1,0 +1,110 @@
+"global HtmlSanitizer";
+
+/*
+ * LAADS Menu Manager
+ * @description Logic for showing and hiding menu options based on external inputs like user session
+ */
+
+(function ($) {
+    /* Class definitions */
+
+    // Top level navigation links
+    function MenuOption(selector, submenuOptions, events, eventHandler) {
+        this.filteredSubmenuOptions = [];
+        this.$el = $(selector);
+        this.submenuOptions = submenuOptions;
+        this.events = events;
+        this.eventHandler = eventHandler;
+    }
+
+    MenuOption.prototype.populate = function () {
+        this.$el.next("ul").html(this.filteredSubmenuOptions.join(""));
+    };
+
+    MenuOption.prototype.addSubmenuOption = function (submenuOption) {
+        this.filteredSubmenuOptions.push(submenuOption);
+    };
+
+    // List items that go under top level navigation links
+    function SubmenuOption(href, label, modalName, animate) {
+        this.href = href;
+        this.label = label;
+        this.modalName = modalName;
+        this.animate = animate;
+    }
+
+    SubmenuOption.prototype.toString = function () {
+        var modalAttr = this.modalName ? "data-toggle='modal' data-target='#" + this.modalName + "'" : "";
+        return "<li><a href='" + this.href + "' " + modalAttr + ">" + (this.animate ? "<div style='display: inline-block; padding-left: 8px;'>" + this.label + "</div>" : this.label) + "</a></li>";
+    };
+
+    // Wrapper class for top level navigation links
+    function MenuManager(menuOptions) {
+        this.menuOptions = menuOptions;
+    }
+
+    MenuManager.prototype.activateEvents = function () {
+        var menuManagerScope = this;
+        menuManagerScope.menuOptions.forEach(function (menuOption) {
+            menuOption.$el.on(menuOption.events, menuOption.eventHandler.bind(menuOption));
+        });
+    };
+
+    MenuManager.prototype.populate = function () {
+        var menuManagerScope = this;
+        menuManagerScope.menuOptions.forEach(function (menuOption) {
+            menuOption.populate();
+        });
+    };
+
+    /* menu logic */
+    var topLevelMenuOptions = [
+        new MenuOption(
+            "#profile-menu-option", 
+            {
+                // "key"  : new SubmenuOption("href value", "text"),
+                "login"  : new SubmenuOption("javascript:redirectURSLogin();", "Earthdata Login", null, false),
+                "logout" : new SubmenuOption("/oauth/logout?redirect="+encodeURIComponent("/"), "Logout", null, false),
+                "orders" : new SubmenuOption("/search/history", "Orders", null, false),
+                "generateToken" : new SubmenuOption("https://urs.earthdata.nasa.gov/profile", "Generate Token", null, false),
+            },
+            "click",
+            function () {
+                var menuOptionScope = this;
+                menuOptionScope.filteredSubmenuOptions = [];
+                menuOptionScope.addSubmenuOption(
+                    new SubmenuOption("javascript:void(0);", "<i class=\"fa-solid fa-arrows-rotate\"></i> <i>Loading&hellip;</i>", null, true)
+                );
+                menuOptionScope.populate();
+
+                window.isUserLoggedIn()
+                    .then(sessionStatus => {
+                        menuOptionScope.filteredSubmenuOptions = [];
+
+                        if (sessionStatus) {
+                            menuOptionScope.addSubmenuOption(menuOptionScope.submenuOptions.generateToken);
+                            menuOptionScope.addSubmenuOption(menuOptionScope.submenuOptions.orders);
+                            menuOptionScope.addSubmenuOption(menuOptionScope.submenuOptions.logout);
+                        } else {
+                            menuOptionScope.addSubmenuOption(menuOptionScope.submenuOptions.login);
+                        }
+
+                        menuOptionScope.populate();
+
+                    });
+            }
+        ),
+    ];
+
+    var topLevelMenu = new MenuManager(topLevelMenuOptions);
+
+    topLevelMenu.activateEvents();
+    topLevelMenu.populate();
+})(jQuery);
+
+function redirectURSLogin() {
+    var state = (window.location.href.indexOf("/search/")>=0) ? "/search/" : window.location.pathname;
+    sessionStorage.redirect = "true";
+    var url = "/oauth/login?redirect="+encodeURIComponent(state);
+    window.location.href = url;
+}

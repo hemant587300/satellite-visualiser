@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>NDVI Time Series Viewer</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f7f7f7;
+      color: #333;
+    }
+
+    h2 {
+      background: #222;
+      color: white;
+      padding: 12px;
+      margin: 0;
+      text-align: center;
+    }
+
+    .latest-date {
+      text-align: center;
+      font-size: 16px;
+      margin-top: 8px;
+      color: #444;
+    }
+
+    #map {
+      height: 600px;
+      width: 100%;
+    }
+
+    #controls {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      padding: 15px 10px;
+      background-color: #fff;
+    }
+
+    button {
+      padding: 10px 16px;
+      font-size: 14px;
+      border: none;
+      border-radius: 6px;
+      background-color: #2c7be5;
+      color: white;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #1a4d96;
+    }
+
+    #opacitySlider {
+      width: 180px;
+      vertical-align: middle;
+    }
+
+    #slider-container {
+      text-align: center;
+      margin-bottom: 30px;
+      background: #fff;
+      padding: 10px 0;
+    }
+
+    #overlaySlider {
+      width: 60%;
+    }
+
+    #date-label {
+      font-weight: bold;
+      font-size: 1.2em;
+      margin-top: 12px;
+    }
+
+    #ndvi-stats {
+      font-size: 14px;
+      color: #555;
+      margin-top: 4px;
+    }
+
+    .legend {
+      position: absolute;
+      bottom: 25px;
+      right: 15px;
+      background: white;
+      padding: 10px;
+      border: 1px solid #ccc;
+      font-size: 12px;
+      line-height: 1.4;
+      z-index: 999;
+    }
+
+    .legend-title {
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+
+    .legend-gradient {
+      background: linear-gradient(to right, #ffffe5, #d9f0a3, #addd8e, #78c679, #41ab5d, #238443, #005a32);
+      height: 15px;
+      margin-bottom: 5px;
+    }
+
+    .legend-labels {
+      display: flex;
+      justify-content: space-between;
+    }
+
+    @media screen and (max-width: 600px) {
+      #overlaySlider {
+        width: 90%;
+      }
+      #opacitySlider {
+        width: 120px;
+      }
+      #controls {
+        flex-direction: column;
+      }
+    }
+  </style>
+
+  <!-- Leaflet & html2canvas -->
+  <script src="https://unpkg.com/leaflet-image/leaflet-image.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+</head>
+
+<body>
+  <h2>NDVI Time-Series Map Viewer</h2>
+  <div class="latest-date">🗓️ Latest NDVI Date: <strong>{{ overlays[-1]['date'] }}</strong></div>
+
+  <div id="map"></div>
+
+  <div id="controls">
+    <button onclick="toggleLayer()">Toggle Overlay</button>
+    <button onclick="autoPlay()">▶️ Play</button>
+    <label>Opacity:</label>
+    <input type="range" id="opacitySlider" min="0" max="1" step="0.1" value="0.7" />
+    <button onclick="downloadOverlay()">Download Overlay</button>
+    <button onclick="downloadMap()">Download Map</button>
+    <button onclick="exportPNG()">📸 Export as Image</button>
+  </div>
+
+  <div id="slider-container">
+    <input type="range" id="overlaySlider" min="0" max="{{ overlays|length - 1 }}" value="0" step="1" />
+    <div id="date-label">{{ overlays[0]['date'] }}</div>
+    <div id="ndvi-stats">Mean NDVI: — | Min: — | Max: —</div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-title">NDVI Scale</div>
+    <div class="legend-gradient"></div>
+    <div class="legend-labels">
+      <span>0</span><span>0.2</span><span>0.4</span><span>0.6</span><span>0.8</span><span>1.0</span>
+    </div>
+  </div>
+
+  <script>
+    const map = L.map('map').setView([{{ lat }}, {{ lon }}], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+
+    const overlays = [
+      {% for item in overlays %}
+        {
+          date: "{{ item.date }}",
+          bounds: {{ item.bounds | tojson }},
+          url: "/output/{{ item.file }}"
+        }{% if not loop.last %},{% endif %}
+      {% endfor %}
+    ];
+
+    const imageLayers = overlays.map(o => L.imageOverlay(o.url, o.bounds, { opacity: 0.7 }));
+    let currentLayer = imageLayers[0];
+    currentLayer.addTo(map);
+
+    const slider = document.getElementById("overlaySlider");
+    const label = document.getElementById("date-label");
+    const stats = document.getElementById("ndvi-stats");
+    const opacitySlider = document.getElementById("opacitySlider");
+
+    function updateStats(index) {
+      const img = new Image();
+      img.crossOrigin = "Anonymous";
+      img.src = overlays[index].url;
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0);
+        const data = ctx.getImageData(0, 0, img.width, img.height).data;
+
+        let sum = 0, min = 1, max = 0, count = 0;
+        for (let i = 3; i < data.length; i += 4) {
+          const alpha = data[i];
+          if (alpha > 0) {
+            const ndvi = data[i - 1] / 255;
+            sum += ndvi;
+            min = Math.min(min, ndvi);
+            max = Math.max(max, ndvi);
+            count++;
+          }
+        }
+        if (count > 0) {
+          stats.textContent = `Mean NDVI: ${(sum/count).toFixed(2)} | Min: ${min.toFixed(2)} | Max: ${max.toFixed(2)}`;
+        } else {
+          stats.textContent = `Mean NDVI: — | Min: — | Max: —`;
+        }
+      };
+    }
+
+    slider.addEventListener("input", function () {
+      map.removeLayer(currentLayer);
+      currentLayer = imageLayers[this.value];
+      currentLayer.setOpacity(parseFloat(opacitySlider.value));
+      currentLayer.addTo(map);
+      label.textContent = overlays[this.value].date;
+      updateStats(this.value);
+    });
+
+    opacitySlider.addEventListener("input", function () {
+      currentLayer.setOpacity(parseFloat(this.value));
+    });
+
+    function toggleLayer() {
+      if (map.hasLayer(currentLayer)) {
+        map.removeLayer(currentLayer);
+      } else {
+        currentLayer.addTo(map);
+      }
+    }
+
+    function downloadOverlay() {
+      const url = overlays[slider.value].url;
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = url.split("/").pop();
+      link.click();
+    }
+
+    function downloadMap() {
+      const link = document.createElement('a');
+      link.href = "/output/ndvi_web_map.html";
+      link.download = "ndvi_map.html";
+      link.click();
+    }
+
+ function exportPNG() {
+  leafletImage(map, function(err, canvas) {
+    const ctx = canvas.getContext('2d');
+    const padding = 10;
+
+    // Add white box background for text
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.fillRect(padding, padding, 340, 110);
+
+    // Add title
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 18px Arial';
+    ctx.fillText('🛰️ Satellite NDVI Map', padding + 10, 30);
+
+    // Add date
+    const currentDate = overlays[slider.value].date;
+    ctx.font = '14px Arial';
+    ctx.fillText(`📅 Date: ${currentDate}`, padding + 10, 55);
+
+    // Add coordinates
+    ctx.fillText(`📍 Lat: {{ lat }}, Lon: {{ lon }}`, padding + 10, 75);
+
+    // Add watermark
+    ctx.fillStyle = '#555';
+    ctx.font = '12px Arial';
+    ctx.fillText('Generated by NDVI Time-Series Viewer', padding + 10, 100);
+
+    // Download as PNG
+    const link = document.createElement('a');
+    link.download = `NDVI_Map_${currentDate}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  });
+}
+
+
+
+    function autoPlay() {
+      let index = parseInt(slider.value);
+      const max = overlays.length - 1;
+      const interval = setInterval(() => {
+        if (index >= max) {
+          clearInterval(interval);
+        } else {
+          slider.value = ++index;
+          slider.dispatchEvent(new Event("input"));
+        }
+      }, 1200);
+    }
+
+    updateStats(0);
+  </script>
+</body>
+</html>
